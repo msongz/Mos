@@ -1,0 +1,53 @@
+name: Build Mos
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Package Mos.app
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Mos
+        run: |
+          xcodebuild \
+            -scheme Debug \
+            -project Mos.xcodeproj \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package Mos.app to Zip
+        run: |
+          APP_PATH=$(find build/Build/Products -name "Mos.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "Error: Mos.app not found in build/Build/Products"
+            exit 1
+          fi
+          echo "Found app at: $APP_PATH"
+
+          # Ad-hoc code sign so macOS can launch it
+          codesign --force --deep --sign - "$APP_PATH"
+
+          # Package release zip without AppleDouble (._*) metadata
+          ditto -c -k --norsrc --noextattr --keepParent "$APP_PATH" "Mos.zip"
+
+      - name: Upload Mos Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mos
+          path: Mos.zip
+          retention-days: 30
